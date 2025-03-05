@@ -11,7 +11,6 @@ const ImageCropper = () => {
   const containerRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   
-  // New state for image size and original dimensions
   const [imageSize, setImageSize] = useState({
     width: 0,
     height: 0,
@@ -19,7 +18,28 @@ const ImageCropper = () => {
     originalHeight: 0
   });
 
-  // Handle image upload
+  // Get coordinates from touch or mouse event
+  const getEventCoordinates = (e) => {
+    const container = containerRef.current;
+    const rect = container.getBoundingClientRect();
+    
+    // Check if it's a touch event
+    if (e.touches) {
+      const touch = e.touches[0];
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+      };
+    }
+    
+    // Mouse event
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  };
+
+  // Handle image upload (unchanged)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     const reader = new FileReader();
@@ -28,14 +48,12 @@ const ImageCropper = () => {
       const img = new Image();
       img.onload = () => {
         setImage(img);
-        // Set initial and original image size
         setImageSize({
           width: img.width,
           height: img.height,
           originalWidth: img.width,
           originalHeight: img.height
         });
-        // Reset crop box
         setCropBox({
           x: 0,
           y: 0,
@@ -49,11 +67,14 @@ const ImageCropper = () => {
     reader.readAsDataURL(file);
   };
 
-  // Handle width change
+  // Handle width and height change (unchanged)
   const handleWidthChange = (e) => {
-    const newWidth = Math.max(10, Math.min(parseInt(e.target.value), 2000));
+    // Parse the input value, defaulting to 1 if empty or NaN
+    const inputWidth = parseInt(e.target.value) || 1;
     
-    // Maintain aspect ratio
+    // Constrain width between 1 and 2000
+    const newWidth = Math.max(0, Math.min(inputWidth, 2000));
+    
     const aspectRatio = imageSize.originalWidth / imageSize.originalHeight;
     const newHeight = Math.round(newWidth / aspectRatio);
 
@@ -64,11 +85,9 @@ const ImageCropper = () => {
     }));
   };
 
-  // Handle height change
+
   const handleHeightChange = (e) => {
-    const newHeight = Math.max(10, Math.min(parseInt(e.target.value), 2000));
-    
-    // Maintain aspect ratio
+    const newHeight = Math.max(0, Math.min(parseInt(e.target.value), 2000));
     const aspectRatio = imageSize.originalWidth / imageSize.originalHeight;
     const newWidth = Math.round(newHeight * aspectRatio);
 
@@ -79,7 +98,68 @@ const ImageCropper = () => {
     }));
   };
 
-  // Handle mouse down to start crop
+  // Touch start handling
+  const handleTouchStart = useCallback((e) => {
+    if (!image) return;
+
+    // Prevent default to stop scrolling
+    e.preventDefault();
+
+    const container = containerRef.current;
+    const { x, y } = getEventCoordinates(e);
+    
+    // Prevent drawing outside image
+    if (x < 0 || y < 0 || 
+        x > container.offsetWidth || 
+        y > container.offsetHeight) {
+      return;
+    }
+
+    setIsDrawing(true);
+
+    // Reset crop box and start new selection
+    setCropBox({
+      x,
+      y,
+      width: 0,
+      height: 0
+    });
+  }, [image]);
+
+  // Touch move handling
+  const handleTouchMove = useCallback((e) => {
+    if (!isDrawing || !image) return;
+
+    // Prevent default to stop scrolling
+    e.preventDefault();
+
+    const container = containerRef.current;
+    const { x: currentX, y: currentY } = getEventCoordinates(e);
+
+    // Constrain to container bounds
+    const constrainedX = Math.max(0, Math.min(currentX, container.offsetWidth));
+    const constrainedY = Math.max(0, Math.min(currentY, container.offsetHeight));
+
+    setCropBox(prev => {
+      // Calculate new dimensions
+      const newWidth = Math.abs(constrainedX - prev.x);
+      const newHeight = Math.abs(constrainedY - prev.y);
+
+      return {
+        x: Math.min(prev.x, constrainedX),
+        y: Math.min(prev.y, constrainedY),
+        width: newWidth,
+        height: newHeight
+      };
+    });
+  }, [isDrawing, image]);
+
+  // Touch end handling
+  const handleTouchEnd = useCallback(() => {
+    setIsDrawing(false);
+  }, []);
+
+  // Mouse down handling (unchanged)
   const handleMouseDown = useCallback((e) => {
     if (!image) return;
 
@@ -107,7 +187,7 @@ const ImageCropper = () => {
     });
   }, [image]);
 
-  // Handle mouse move during crop
+  // Mouse move handling (unchanged)
   const handleMouseMove = useCallback((e) => {
     if (!isDrawing || !image) return;
 
@@ -135,7 +215,8 @@ const ImageCropper = () => {
     });
   }, [isDrawing, image]);
 
-  // Handle document click to reset crop
+  // Rest of the code remains the same as in previous implementation
+  // (handleDocumentClick, handleMouseUp, handleCrop, useEffects)
   const handleDocumentClick = useCallback((e) => {
     if (!containerRef.current) return;
 
@@ -164,12 +245,10 @@ const ImageCropper = () => {
     }
   }, []);
 
-  // Handle mouse up to end crop selection
   const handleMouseUp = useCallback(() => {
     setIsDrawing(false);
   }, []);
 
-  // Perform cropping
   const handleCrop = (e) => {
     // Prevent the click from triggering document click event
     e.stopPropagation();
@@ -261,7 +340,7 @@ const ImageCropper = () => {
                 type="number" 
                 value={imageSize.width}
                 onChange={handleWidthChange}
-                min="10"
+                min="0"
                 max="2000"
                 className="w-20 border rounded px-2 py-1 text-sm"
               />
@@ -272,7 +351,7 @@ const ImageCropper = () => {
                 type="number" 
                 value={imageSize.height}
                 onChange={handleHeightChange}
-                min="10"
+                min="0"
                 max="2000"
                 className="w-20 border rounded px-2 py-1 text-sm"
               />
@@ -286,6 +365,11 @@ const ImageCropper = () => {
             ref={containerRef}
             className="relative w-full border-2 border-gray-300"
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            // Prevent default touch behavior to avoid scrolling/zooming
+            style={{ touchAction: 'none' }}
           >
             <img 
               src={image.src} 
@@ -315,7 +399,7 @@ const ImageCropper = () => {
               {cropBox.width > 0 && cropBox.height > 0 ? (
                 `Crop Area: X: ${Math.round(cropBox.x)}, Y: ${Math.round(cropBox.y)}, Width: ${Math.round(cropBox.width)}, Height: ${Math.round(cropBox.height)}`
               ) : (
-                "Select an area to crop by clicking and dragging"
+                "Select an area to crop by clicking/touching and dragging"
               )}
             </div>
 
